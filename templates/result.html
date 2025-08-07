@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>PICS Prediction</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+      * {
+        box-sizing: border-box;
+        font-family: 'Inter', sans-serif;
+      }
+
+      body {
+        background: #f7f9fc;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+      }
+
+      .container {
+        background: white;
+        padding: 2.5rem 3rem;
+        border-radius: 16px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        max-width: 520px;
+        width: 100%;
+      }
+
+      h2 {
+        color: #333;
+        font-weight: 600;
+        font-size: 1.5rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .label-box {
+        display: inline-block;
+        background-color: #0077ff;
+        color: white;
+        padding: 0.6rem 1.2rem;
+        border-radius: 12px;
+        font-size: 1.1rem;
+        font-weight: 500;
+        margin-bottom: 1rem;
+      }
+
+      .label-box.amorphous {
+        background-color: #ff6b6b;
+      }
+
+      .result-image {
+        max-width: 100%;
+        width: 480px; /* NEW: Set a fixed larger width */
+        height: auto;
+        margin-top: 1rem;
+        margin-bottom: 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      }
+
+      .button-link {
+        display: inline-block;
+        text-decoration: none;
+        color: white;
+        background-color: #333;
+        padding: 0.7rem 1.5rem;
+        border-radius: 10px;
+        transition: background 0.3s ease;
+      }
+
+      .button-link:hover {
+        background-color: #000;
+      }
+
+      .footer {
+        margin-top: 2rem;
+        font-size: 0.9rem;
+        color: #888;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>🔍 PICS Prediction</h2>
+      <div class="label-box {{ label.lower() }}">
+        {{ label.capitalize() }}
+      </div>
+
+      <img src="{{ url_for('serve_results', filename=plot_filename) }}"
+           alt="Classification Visualization"
+           class="result-image" />
+
+      <br>
+      <a class="button-link" href="{{ url_for('upload_file') }}">🔁 Try Another Image</a>
+      <div class="footer">
+        © 2025 Persist AI Formulations Corp. Results are saved in your system
+      </div>
+    </div>
+  </body>
+</html>
