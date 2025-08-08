@@ -117,13 +117,6 @@ def analyze_image(filename, timestamp, file, well_name, sample_num):
 def serve_results(filename):
     return send_from_directory(RESULTS_FOLDER, filename)
 
-'''
-
-need 2 functions: 
-    - one for each type of analysis script
-
-'''
-
 
 model_path = os.path.join("content", "persist_model", "best.pt")
 parent_path = os.path.join("results")
@@ -409,43 +402,6 @@ def capture_amorphous_crystalline(data):
     print("Homing all axes...")
     stage.home_all_axes(timeout=5)
     return results if results else {"error": "No samples processed"}
-
-'''
-#This is manual upload script for the old flask app
-def upload_file():
-    if request.method == 'POST':
-        if 'image' not in request.files:
-            return redirect(request.url)
-        file = request.files['image']
-
-        print("This is file var: ", file)
-
-        if file.filename == '' or not allowed_file(file.filename):
-            return redirect(request.url)
-
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-        filename = secure_filename(file.filename)
-        print("This is filename var: ", filename)
-
-        ext = filename.rsplit('.', 1)[1].lower()
-        original_filename = f"{timestamp}_original.{ext}"
-        original_path = os.path.join(app.config['RESULTS_FOLDER'], original_filename)
-
-        image_bytes = file.read()
-        image_np = io.imread(image_bytes, plugin='imageio')
-        io.imsave(original_path, image_np)
-
-        label, edges = extract_features(image_np)
-        plot_filename = f"{timestamp}_plot.png"
-
-        generate_plot(image_np, edges, label, timestamp, plot_filename)
-
-
-        return render_template('result.html', label=label, plot_filename=plot_filename)
-
-    return render_template('index.html')
-'''
 
 #UASERVER LOGIC
 #create method node
