@@ -214,6 +214,28 @@ def brightfield_analysis():
         "postprocessed_imgs_path": postprocessed_imgs_path
     }
 
+def zip_and_delete_image(root, zip_filename):  #root is the path to the results folder
+
+    images_to_delete = []
+
+    with zipfile.ZipFile(zip_filename, 'w') as zipf:  #opens a new zip file, zip_filename
+        for current_root, dirs, files in os.walk(root): 
+            for file in files: 
+                if file.lower().endswith(('.tif', '.tiff', '.png', '.jpg', '.txt')): 
+                    file_path = os.path.join(current_root, file)
+                    zipf.write(file_path, arcname=file)
+                    images_to_delete.append(file_path)
+
+        dirs.clear()
+
+    for file in images_to_delete: 
+        try: 
+            os.remove(file)
+            print("Successfully removed original image")
+        
+        except Exception as e: 
+            print("Failed to remove file: ", e)
+
 
 
 def capture_brightfield(data): 
@@ -232,7 +254,6 @@ def capture_brightfield(data):
             
         except Exception as e:
             print(f"COM3 also failed: {e}")
-
 
     #move stage and take image at each well
     for well_data in data: 
@@ -271,13 +292,14 @@ def capture_brightfield(data):
             if not os.path.exists(image_path):
                 return {"error": "Image folder not found"}
 
-            files = [
+
+            files = [   
                 os.path.join(image_path, f)
                 for f in os.listdir(image_path)
                 if os.path.isfile(os.path.join(image_path, f))
             ]
 
-            print(files)
+
 
             corrected_files = []
             for file in files: 
@@ -289,7 +311,7 @@ def capture_brightfield(data):
                     corrected_files.append(file)
 
             print(corrected_files)
-            latest_image = max(corrected_files, key=os.path.getctime)
+            latest_image = max(files, key=os.path.getctime)
             print("Using latest image:", latest_image)
 
             
@@ -311,6 +333,9 @@ def capture_brightfield(data):
 
     print("Homing all axes...")
     stage.home_all_axes(timeout=5)
+
+    zip_filename = f"{timestamp}_brightfield_original.zip"
+    zip_and_delete_image(parent_path, zip_filename)
     return {"Finished brightfield analysis on all wells."}
 
 
@@ -401,6 +426,8 @@ def capture_amorphous_crystalline(data):
     #once everything is done, home the xy stage
     print("Homing all axes...")
     stage.home_all_axes(timeout=5)
+    zip_filename = f"{timestamp}_amorphous_crystalline_original.zip"
+    zip_and_delete_image(parent_path, zip_filename)
     return results if results else {"error": "No samples processed"}
 
 #UASERVER LOGIC
@@ -421,8 +448,8 @@ def add_amscope(server):
 
                     {"x": 14000, "y": 12000},
                     {"x": 14000, "y": 23000},
-                    {"x": 3000, "y": 23000},
-                    {"x": 3000, "y": 12000}
+                    #{"x": 3000, "y": 23000},
+                    #{"x": 3000, "y": 12000}
                     
                 ]
             }
@@ -474,7 +501,7 @@ def main():
         while True:  #keep the server running until it is manually stopped
             time.sleep(1) #this is needed bc it prevents loop from hogging CPU
     finally: 
-        server.stop() #guarantees server stops when you interrupt itl
+        server.stop() #guarantees server stops when you interrupt it
 
 if __name__=="__main__": 
     main()
