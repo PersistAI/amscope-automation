@@ -151,24 +151,8 @@ def check_and_upload_model(path):
     # Define the full path for 'best.pt' in the target directory
     pt_file_path = os.path.join(path, 'best.pt')
 
-    # Check if the PT file exists within the path
-    if not os.path.exists(pt_file_path):
-        print("Please upload 'best.pt' file.")
-        uploaded = files.upload()  # Request file upload
+    print("File exists, proceeding with the process...")
 
-        # Move the uploaded file to the specified path
-        for filename in uploaded.keys():
-            # Source path (current directory)
-            src = filename
-            # Destination path (specified path)
-            dst = pt_file_path
-
-            # Move the file
-            shutil.move(src, dst)
-            print(f"'{filename}' uploaded and moved to '{dst}'.")
-
-    else:
-        print("'best.pt' file already exists. Proceeding with the process.")
 
 def load_images_from_folder(folder):
   images = []
@@ -184,12 +168,18 @@ def load_images_from_folder(folder):
 
   return images, filenames
 
+
+
+
 # Reinjecting the upload_and_extract_to_folder fun for validation of files
 
+
 def upload_and_extract_to_folder(data_storage_path, folder_name):
+
     """
     Prompts the user to upload a zip file and extracts it to the specified folder.
     """
+
     print(f"Please upload the zip file for {folder_name} data:")
     uploaded = files.upload()
 
@@ -236,6 +226,7 @@ def upload_and_extract_to_folder(data_storage_path, folder_name):
             for root, dirs, files_in_dir in os.walk(target_folder):
                 for file_in_dir in files_in_dir:
                     print(os.path.join(root, file_in_dir))
+
 
 """## Post-processing statistics functions"""
 
@@ -454,11 +445,12 @@ def parse_particle_data(file_path):
                 particle_data.append((particle_id, diameter, area))
     return particle_data
 
+'''
 """# **Prepare uploaded data for model**"""
 
 # Upload dat_folder
 data_storage_path = os.path.join(main_folder_path, "dat_folder")
-upload_and_extract_to_folder(data_storage_path, "Brightfield particle image") # Will make this name dynamic / change it depending on data type uploaded - 2024Jan05 JMM
+#upload_and_extract_to_folder(data_storage_path, "Brightfield particle image") # Will make this name dynamic / change it depending on data type uploaded - 2024Jan05 JMM
 
 CLAHE_images(data_storage_path) # prepared data to be stored in "CLAHE_images" folder
 
@@ -708,3 +700,5 @@ with ZipFile(zip_file_path, 'w') as zipf:
 
 zip_location = os.path.join(main_folder_path,'output.zip')
 # files.download(zip_location) # Need help from Sarah DevOps to export this zip
+
+'''
