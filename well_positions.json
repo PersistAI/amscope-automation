@@ -1,0 +1,25 @@
+{
+  "96": [ 
+    {
+    "starting-well": "A1",
+    "starting-position": [
+                    {"x": 14000, "y": 12000}
+                ],
+                
+      "total-wells": 96
+    }
+  ],
+
+  "12": [
+
+    {
+    "starting-well": "A1",
+    "starting-position": [
+                    {"x": 14000, "y": 12000}
+
+    ],
+    "total-wells": 12
+}
+  ]
+
+}

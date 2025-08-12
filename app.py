@@ -243,6 +243,9 @@ def capture_brightfield(data):
 
     stage = None
 
+    x_offset = 10320
+    y_offset = 10250
+
     try:
         stage = MisumiXYWrapper(port='COM3')
 
@@ -255,81 +258,112 @@ def capture_brightfield(data):
         except Exception as e:
             print(f"COM3 also failed: {e}")
 
-    #move stage and take image at each well
-    for well_data in data: 
-        well_name = well_data.get("well")
-        positions = well_data.get("sample-positions", [])
+    starting_well = data[0]
+    well_name = starting_well.get("starting-well")
+    positions = starting_well.get("starting-position", [])
+    total_wells = starting_well.get("total-wells")
+    print("Currently on position: ", positions)
 
-        for idx, coords in enumerate(positions):
-            x = coords["x"]
-            y = coords["y"]
-            idx+=1
-            print(f"Processing {well_name} sample #{idx} at ({x}, {y})")
+    starting_x = positions[0]["x"]
+    starting_y = positions[0]["y"]
 
-            amscope = Tucam()
+    print(f"starting x: {starting_x}")
+    print(f"starting y: {starting_y}")
 
-            try:
-                stage.move_to_position({AxisName.X: x, AxisName.Y: y})
-            except Exception as e: 
-                print("Failed to move ", e)
+    if total_wells == 12: #if it's a 12 well plate
 
-            amscope.OpenCamera(0)
+            x_limit = 4
+            y_limit = 3
 
-            #try to give camera a delay between opening the camera and taking the picture
-            time.sleep(10)
+            print(f"x_limit is {x_limit}, y_limit is {y_limit}")
 
-            if amscope.TUCAMOPEN.hIdxTUCam != 0:
+    elif total_wells == 96:
 
-                amscope.SaveImageData() #this takes the picture
-                print("Image captured!")
-                amscope.CloseCamera()
-
-            amscope.UnInitApi()
-
-            image_path = r"C:\Users\ruyek\OneDrive\Desktop\Image"
+            x_limit = 12
+            y_limit = 8
+            print(f"x_limit is {x_limit}, y_limit is {y_limit}")
 
 
-            if not os.path.exists(image_path):
-                return {"error": "Image folder not found"}
+    x_count = 0 #use these to determine if we hit the limit of the well
+    y_count = 0
+
+    x_pos = starting_x
+    y_pos = starting_y
+
+    for y_count in range(y_limit):
+        for x_count in range(x_limit): 
+                    print(f"X count is at {x_count}")
+                    print(f"Processing {well_name} sample #{x_count} at ({x_pos}, {y_pos})")
+
+                    amscope = Tucam()
+
+                    try:
+                        stage.move_to_position({AxisName.X: x_pos, AxisName.Y: y_pos})
+                    except Exception as e: 
+                        print("Failed to move ", e)
+
+                    amscope.OpenCamera(0)
+
+                    #try to give camera a delay between opening the camera and taking the picture
+                    time.sleep(10)
+
+                    if amscope.TUCAMOPEN.hIdxTUCam != 0:
+
+                        amscope.SaveImageData() #this takes the picture
+                        print("Image captured!")
+                        amscope.CloseCamera()
+
+                    amscope.UnInitApi()
+
+                    image_path = r"C:\Users\ruyek\OneDrive\Desktop\Image"
 
 
-            files = [   
-                os.path.join(image_path, f)
-                for f in os.listdir(image_path)
-                if os.path.isfile(os.path.join(image_path, f))
-            ]
+                    if not os.path.exists(image_path):
+                        return {"error": "Image folder not found"}
+
+
+                    files = [   
+                        os.path.join(image_path, f)
+                        for f in os.listdir(image_path)
+                        if os.path.isfile(os.path.join(image_path, f))
+                    ]
 
 
 
-            corrected_files = []
-            for file in files: 
-                if file.endswith(".tif.tif"): 
-                    corrected_files.append(file[:-4])
-                elif file.endswith(".tiff.tiff"):
-                    corrected_files.append(file[:-5])   
-                else: 
-                    corrected_files.append(file)
+                    corrected_files = []
+                    for file in files: 
+                        if file.endswith(".tif.tif"): 
+                            corrected_files.append(file[:-4])
+                        elif file.endswith(".tiff.tiff"):
+                            corrected_files.append(file[:-5])   
+                        else: 
+                            corrected_files.append(file)
 
-            print(corrected_files)
-            latest_image = max(files, key=os.path.getctime)
-            print("Using latest image:", latest_image)
+                    #print(corrected_files)
+                    latest_image = max(files, key=os.path.getctime)
+                    #print("Using latest image:", latest_image)
 
+                    
+
+                    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+                    ext = latest_image.rsplit('.', 1)[1].lower()
+                    original_filename = f"{timestamp}_brightfield.{ext}"
+                    # Open file and pass to analyzer
+                    original_path = os.path.join(app.config['RESULTS_FOLDER'], original_filename)
+
+                    with open(latest_image, 'rb') as file: 
+                        image_bytes = file.read()
+                        image_np = io.imread(image_bytes, plugin='imageio')
+                        io.imsave(original_path, image_np)
+
+                
+                    brightfield_analysis() #goes through all the captured images and analyzes them
+
+                    x_pos+=x_offset
             
-
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-            ext = latest_image.rsplit('.', 1)[1].lower()
-            original_filename = f"{timestamp}_brightfield.{ext}"
-            # Open file and pass to analyzer
-            original_path = os.path.join(app.config['RESULTS_FOLDER'], original_filename)
-
-            with open(latest_image, 'rb') as file: 
-                image_bytes = file.read()
-                image_np = io.imread(image_bytes, plugin='imageio')
-                io.imsave(original_path, image_np)
-
-        
-            brightfield_analysis() #goes through all the captured images and analyzes them
+        y_pos += y_offset
+        x_pos = starting_x
 
     print("Homing all axes...")
     stage.home_all_axes(timeout=5)
@@ -339,13 +373,48 @@ def capture_brightfield(data):
     return {"Finished brightfield analysis on all wells."}
 
 
-
 def capture_amorphous_crystalline(data):
     results = []
-
     stage = None
-    TUCAM_Prop_SetValue.argtypes = [c_void_p, c_int32, c_double, c_int32]
-    TUCAM_Capa_SetValue.restype  = TUCAMRET
+
+    #NOTE: 500steps = 1mm
+    
+    x_offset = 10320
+    y_offset = 10250
+
+
+    starting_well = data[0]
+    well_name = starting_well.get("starting-well")
+    positions = starting_well.get("starting-position", [])
+    total_wells = starting_well.get("total-wells")
+    print("Currently on position: ", positions)
+
+    starting_x = positions[0]["x"]
+    starting_y = positions[0]["y"]
+
+    print(f"starting x: {starting_x}")
+    print(f"starting y: {starting_y}")
+
+    if total_wells == 12: #if it's a 12 well plate
+
+            x_limit = 4
+            y_limit = 3
+
+            print(f"x_limit is {x_limit}, y_limit is {y_limit}")
+
+    elif total_wells == 96:
+
+            x_limit = 12
+            y_limit = 8
+            print(f"x_limit is {x_limit}, y_limit is {y_limit}")
+
+
+    x_count = 0 #use these to determine if we hit the limit of the well
+    y_count = 0
+
+    x_pos = starting_x
+    y_pos = starting_y
+
 
     #INITIALIZE THE XY STAGE, TRY cONNECTING TO COM3 AND COM4
     try:
@@ -360,22 +429,19 @@ def capture_amorphous_crystalline(data):
         except Exception as e:
             print(f"COM3 also failed: {e}")
 
-    for well_data in data: 
-        well_name = well_data.get("well")
-        positions = well_data.get("sample-positions", [])
+    for y_count in range(y_limit):
+        for x_count in range(x_limit):
 
-        for idx, coords in enumerate(positions):
-            x = coords["x"]
-            y = coords["y"]
-            idx+=1
-            print(f"Processing {well_name} sample #{idx} at ({x}, {y})")
+            print(f"Processing {well_name} sample #{x_count} at ({x_pos}, {y_pos})")
 
             amscope = Tucam()
-
+            
+        
             try:
-                stage.move_to_position({AxisName.X: x, AxisName.Y: y})
+                stage.move_to_position({AxisName.X: x_pos, AxisName.Y: y_pos})
             except Exception as e: 
                 print("Failed to move ", e)
+            
 
             amscope.OpenCamera(0)
 
@@ -419,9 +485,14 @@ def capture_amorphous_crystalline(data):
                     timestamp=timestamp,
                     file=file,
                     well_name = well_name,
-                    sample_num = idx
+                    sample_num = x_count
                 )
                 results.append((label, plot_filename))
+
+            x_pos+=x_offset
+            
+        y_pos += y_offset
+        x_pos = starting_x
 
     #once everything is done, home the xy stage
     print("Homing all axes...")
@@ -439,22 +510,24 @@ def add_amscope(server):
 
     def capture_brightfield_node(parent, input_args): 
         #load json file
-        data = [
-            {
-                "well": "A1",
-                "sample-positions": [
+        with open('well_positions.json', 'r') as file:
+            positions = json.load(file)
 
-                    #distance between center is approx 11000
+        key = str(input_args.Value)
+        print("Key is: ", key)
 
-                    {"x": 14000, "y": 12000},
-                    {"x": 14000, "y": 23000},
-                    #{"x": 3000, "y": 23000},
-                    #{"x": 3000, "y": 12000}
-                    
-                ]
-            }
-        ]
+        if key == "96":  
+            print("Selected 96 well plate...")
+            data = positions["96"]
 
+
+        elif key == "12": 
+            print("Selected 12 well plate...")
+            data = positions["12"]
+
+        else:
+                print(f"Unknown plate key: {key}")
+                data = None
         
         result = capture_brightfield(data) #call the capture method with test data
 
@@ -464,22 +537,24 @@ def add_amscope(server):
 
     def capture_amorphous_and_crystalline(parent, input_args): 
         #load json file
-        data = [
-            {
-                "well": "A1",
-                "sample-positions": [
+        with open('well_positions.json', 'r') as file:
+            positions = json.load(file)
 
-                    #distance between center is approx 11000
+        key = str(input_args.Value)
+        print("Key is: ", key)
 
-                    {"x": 14000, "y": 12000},
-                    {"x": 14000, "y": 23000},
-                    {"x": 3000, "y": 23000},
-                    {"x": 3000, "y": 12000}
-                    
-                ]
-            }
-        ]
+        if key == "96":  
+            print("Selected 96 well plate...")
+            data = positions["96"]
 
+
+        elif key == "12": 
+            print("Selected 12 well plate...")
+            data = positions["12"]
+
+        else:
+                print(f"Unknown plate key: {key}")
+                data = None
         
         result = capture_amorphous_crystalline(data) #call the capture method with test data
 

@@ -82,9 +82,14 @@ class Tucam():
         except Exception:
             print('Grab the frame failure, index number is %#d')
 
+        print("Doing TUCAM_Buf_AbortWait")
         TUCAM_Buf_AbortWait(self.TUCAMOPEN.hIdxTUCam)
-        TUCAM_Cap_Stop(self.TUCAMOPEN.hIdxTUCam)
+        print("Doing TUCAM_Cap_Stop")
+        TUCAM_Cap_Stop(self.TUCAMOPEN.hIdxTUCam) #this is what is getting caught up
+        print("Doing TUCAM_Buf_Release")
         TUCAM_Buf_Release(self.TUCAMOPEN.hIdxTUCam)
+
+        print("Done taking the pic :)")
 
 if __name__ == '__main__':
     demo = Tucam()
