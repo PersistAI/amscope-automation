@@ -236,16 +236,8 @@ def zip_and_delete_image(root, zip_filename):  #root is the path to the results 
         except Exception as e: 
             print("Failed to remove file: ", e)
 
-
-
-def capture_brightfield(data): 
-    results = []
-
-    stage = None
-
-    x_offset = 10320
-    y_offset = 10250
-
+def move_to_KX2(): 
+     
     try:
         stage = MisumiXYWrapper(port='COM3')
 
@@ -257,6 +249,33 @@ def capture_brightfield(data):
             
         except Exception as e:
             print(f"COM3 also failed: {e}")
+
+        
+    print("Moving to KX2 Position...")
+    stage.move_to_position({AxisName.X: 100000, AxisName.Y: 0})
+    time.sleep(5)
+
+    return {"Successfully moved to KX2 position."}
+
+def capture_brightfield(data): 
+    results = []
+
+    stage = None
+
+    x_offset = 10320   # well-to-well spacing X
+    y_offset = 10250   # well-to-well spacing Y
+    x_mini_offset = 1500   # how much camera moves within a well
+    y_mini_offset = 1500
+
+    # Try to connect to stage
+    try:
+        stage = MisumiXYWrapper(port='COM3')
+    except Exception as e:
+        print(f"COM3 failed: {e}")
+        try: 
+            stage = MisumiXYWrapper(port='COM4')
+        except Exception as e:
+            print(f"COM4 also failed: {e}")
 
     starting_well = data[0]
     well_name = starting_well.get("starting-well")
@@ -270,100 +289,109 @@ def capture_brightfield(data):
     print(f"starting x: {starting_x}")
     print(f"starting y: {starting_y}")
 
-    if total_wells == 12: #if it's a 12 well plate
-
-            x_limit = 4
-            y_limit = 3
-
-            print(f"x_limit is {x_limit}, y_limit is {y_limit}")
-
+    if total_wells == 12:
+        x_limit, y_limit = 4, 3
+    elif total_wells == 24:
+        x_limit, y_limit = 6, 4
     elif total_wells == 96:
+        x_limit, y_limit = 12, 8
+    else:
+        raise ValueError("Unsupported plate format")
 
-            x_limit = 12
-            y_limit = 8
-            print(f"x_limit is {x_limit}, y_limit is {y_limit}")
-
-
-    x_count = 0 #use these to determine if we hit the limit of the well
-    y_count = 0
-
-    x_pos = starting_x
-    y_pos = starting_y
+    # Initial stage position
+    x_pos, y_pos = starting_x, starting_y
 
     for y_count in range(y_limit):
         for x_count in range(x_limit): 
-                    print(f"X count is at {x_count}")
-                    print(f"Processing {well_name} sample #{x_count} at ({x_pos}, {y_pos})")
+            # Save well center
+            well_x, well_y = x_pos, y_pos
 
-                    amscope = Tucam()
+            for idx in range(9): 
+                print(f"Well {x_count},{y_count} – image {idx+1}/9 at ({x_pos}, {y_pos})")
 
-                    try:
-                        stage.move_to_position({AxisName.X: x_pos, AxisName.Y: y_pos})
-                    except Exception as e: 
-                        print("Failed to move ", e)
+                amscope = Tucam()
+                try:
+                    stage.move_to_position({AxisName.X: x_pos, AxisName.Y: y_pos})
+                except Exception as e: 
+                    print("Failed to move ", e)
 
-                    amscope.OpenCamera(0)
+                amscope.OpenCamera(0)
+                time.sleep(2)  # small delay
 
-                    #try to give camera a delay between opening the camera and taking the picture
-                    time.sleep(10)
+                if amscope.TUCAMOPEN.hIdxTUCam != 0:
+                    amscope.SaveImageData()
+                    print("Image captured!")
+                    amscope.CloseCamera()
+                amscope.UnInitApi()
 
-                    if amscope.TUCAMOPEN.hIdxTUCam != 0:
+                image_path = r"C:\Users\ruyek\OneDrive\Desktop\Image"
+                if not os.path.exists(image_path):
+                    return {"error": "Image folder not found"}
 
-                        amscope.SaveImageData() #this takes the picture
-                        print("Image captured!")
-                        amscope.CloseCamera()
+                files = [
+                    os.path.join(image_path, f)
+                    for f in os.listdir(image_path)
+                    if os.path.isfile(os.path.join(image_path, f))
+                ]
+                if not files:
+                    return {"error": "No images found"}
 
-                    amscope.UnInitApi()
+                latest_image = max(files, key=os.path.getctime)
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                ext = latest_image.rsplit('.', 1)[1].lower()
+                original_filename = f"{timestamp}_brightfield.{ext}"
+                original_path = os.path.join(app.config['RESULTS_FOLDER'], original_filename)
 
-                    image_path = r"C:\Users\ruyek\OneDrive\Desktop\Image"
+                with open(latest_image, 'rb') as file: 
+                    image_bytes = file.read()
+                    image_np = io.imread(image_bytes, plugin='imageio')
+                    io.imsave(original_path, image_np)
 
+                brightfield_analysis()
 
-                    if not os.path.exists(image_path):
-                        return {"error": "Image folder not found"}
+                if idx == 0: #north
+                    print(f"idx: {idx}")
+                    x_pos -= x_mini_offset
 
+                elif idx == 1: #east
+                    print(f"idx: {idx}")
+                    x_pos += x_mini_offset
+                    y_pos -= y_mini_offset
 
-                    files = [   
-                        os.path.join(image_path, f)
-                        for f in os.listdir(image_path)
-                        if os.path.isfile(os.path.join(image_path, f))
-                    ]
+                elif idx == 2: #south
+                    print(f"idx: {idx}")
+                    y_pos += y_mini_offset
+                    x_pos += x_mini_offset
 
+                elif idx == 3: #west
+                    print(f"idx: {idx}")
+                    x_pos -= x_mini_offset
+                    y_pos += y_mini_offset
 
+                elif idx == 4: #northeast
+                    print(f"idx: {idx}")
+                    y_pos-=y_mini_offset * 2
+                    x_pos -= x_mini_offset
 
-                    corrected_files = []
-                    for file in files: 
-                        if file.endswith(".tif.tif"): 
-                            corrected_files.append(file[:-4])
-                        elif file.endswith(".tiff.tiff"):
-                            corrected_files.append(file[:-5])   
-                        else: 
-                            corrected_files.append(file)
+                elif idx == 5: #southeast
+                    print(f"idx: {idx}")
+                    x_pos += x_mini_offset * 2
 
-                    #print(corrected_files)
-                    latest_image = max(files, key=os.path.getctime)
-                    #print("Using latest image:", latest_image)
+                elif idx == 6: #southwest (FIX)
+                    print(f"idx: {idx}")
+                    y_pos += y_mini_offset * 1.5
 
-                    
+                elif idx == 7: #northwest
+                    print(f"idx: {idx}") 
+                    x_pos -= x_mini_offset * 2
 
-                    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            x_pos, y_pos = well_x, well_y
 
-                    ext = latest_image.rsplit('.', 1)[1].lower()
-                    original_filename = f"{timestamp}_brightfield.{ext}"
-                    # Open file and pass to analyzer
-                    original_path = os.path.join(app.config['RESULTS_FOLDER'], original_filename)
+            x_pos -= x_offset
 
-                    with open(latest_image, 'rb') as file: 
-                        image_bytes = file.read()
-                        image_np = io.imread(image_bytes, plugin='imageio')
-                        io.imsave(original_path, image_np)
-
-                
-                    brightfield_analysis() #goes through all the captured images and analyzes them
-
-                    x_pos+=x_offset
-            
-        y_pos += y_offset
+        y_pos -= y_offset
         x_pos = starting_x
+
 
     print("Homing all axes...")
     stage.home_all_axes(timeout=5)
@@ -379,8 +407,11 @@ def capture_amorphous_crystalline(data):
 
     #NOTE: 500steps = 1mm
     
-    x_offset = 10320
+    x_offset = 10320 #how much camera moves between wells
     y_offset = 10250
+
+    x_mini_offset = 1500 #how much camera moves within a well
+    y_mini_offset = 1500
 
 
     starting_well = data[0]
@@ -408,13 +439,18 @@ def capture_amorphous_crystalline(data):
             y_limit = 8
             print(f"x_limit is {x_limit}, y_limit is {y_limit}")
 
+    elif total_wells == 24: 
+
+            x_limit = 6
+            y_limit = 4
+            print(f"the x_limit is {x_limit}, y_limit is {y_limit}")
+
 
     x_count = 0 #use these to determine if we hit the limit of the well
     y_count = 0
 
     x_pos = starting_x
     y_pos = starting_y
-
 
     #INITIALIZE THE XY STAGE, TRY cONNECTING TO COM3 AND COM4
     try:
@@ -429,69 +465,118 @@ def capture_amorphous_crystalline(data):
         except Exception as e:
             print(f"COM3 also failed: {e}")
 
+
     for y_count in range(y_limit):
         for x_count in range(x_limit):
 
-            print(f"Processing {well_name} sample #{x_count} at ({x_pos}, {y_pos})")
+            well_x = x_pos
+            well_y = y_pos
 
-            amscope = Tucam()
-            
-        
-            try:
-                stage.move_to_position({AxisName.X: x_pos, AxisName.Y: y_pos})
-            except Exception as e: 
-                print("Failed to move ", e)
-            
+            for idx in range(9): 
 
-            amscope.OpenCamera(0)
+                print(f"Processing {well_name} sample #{x_count} at ({x_pos}, {y_pos})")
 
-            #try to give camera a delay between opening the camera and taking the picture
-            time.sleep(10)
-
-            if amscope.TUCAMOPEN.hIdxTUCam != 0:
-                amscope.SaveImageData() #this takes the picture
-                print("Image captured!")
-                amscope.CloseCamera()
+                amscope = Tucam()
                 
-            amscope.UnInitApi()
-
-            # This needs to change based on what device is being used to run the script
-            #This is where the captured images get stored
-            image_path = r"C:\Users\ruyek\OneDrive\Desktop\Image"
-
-
-            if not os.path.exists(image_path):
-                return {"error": "Image folder not found"}
-
-            files = [
-                os.path.join(image_path, f)
-                for f in os.listdir(image_path)
-                if os.path.isfile(os.path.join(image_path, f))
-            ]
-
-            if not files:
-                return {"error": "No images found"}
-        
-
-            latest_image = max(files, key=os.path.getctime)
-            print("Using latest image:", latest_image)
-
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-            # Open file and pass to analyzer
-            with open(latest_image, 'rb') as file:
-                label, plot_filename = analyze_image(
-                    filename=latest_image,
-                    timestamp=timestamp,
-                    file=file,
-                    well_name = well_name,
-                    sample_num = x_count
-                )
-                results.append((label, plot_filename))
-
-            x_pos+=x_offset
             
-        y_pos += y_offset
+                try:
+                    stage.move_to_position({AxisName.X: x_pos, AxisName.Y: y_pos})
+                except Exception as e: 
+                    print("Failed to move ", e)
+                
+
+                amscope.OpenCamera(0)
+
+                #try to give camera a delay between opening the camera and taking the picture
+                time.sleep(10)
+
+                if amscope.TUCAMOPEN.hIdxTUCam != 0:
+                    amscope.SaveImageData() #this takes the picture
+                    print("Image captured!")
+                    amscope.CloseCamera()
+                    
+                amscope.UnInitApi()
+
+                # This needs to change based on what device is being used to run the script
+                #This is where the captured images get stored
+                image_path = r"C:\Users\ruyek\OneDrive\Desktop\Image"
+
+
+                if not os.path.exists(image_path):
+                    return {"error": "Image folder not found"}
+
+                files = [
+                    os.path.join(image_path, f)
+                    for f in os.listdir(image_path)
+                    if os.path.isfile(os.path.join(image_path, f))
+                ]
+
+                if not files:
+                    return {"error": "No images found"}
+            
+
+                latest_image = max(files, key=os.path.getctime)
+                print("Using latest image:", latest_image)
+
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+                # Open file and pass to analyzer
+                with open(latest_image, 'rb') as file:
+                    label, plot_filename = analyze_image(
+                        filename=latest_image,
+                        timestamp=timestamp,
+                        file=file,
+                        well_name = well_name,
+                        sample_num = x_count
+                    )
+                    results.append((label, plot_filename))
+
+                if idx == 0: #north
+                    print(f"idx: {idx}")
+                    x_pos -= x_mini_offset
+
+                elif idx == 1: #east
+                    print(f"idx: {idx}")
+                    x_pos += x_mini_offset
+                    y_pos -= y_mini_offset
+
+                elif idx == 2: #south
+                    print(f"idx: {idx}")
+                    y_pos += y_mini_offset
+                    x_pos += x_mini_offset
+
+                elif idx == 3: #west
+                    print(f"idx: {idx}")
+                    x_pos -= x_mini_offset
+                    y_pos += y_mini_offset
+
+                elif idx == 4: #northeast
+                    print(f"idx: {idx}")
+                    y_pos-=y_mini_offset * 2
+                    x_pos -= x_mini_offset
+
+                elif idx == 5: #southeast
+                    print(f"idx: {idx}")
+                    x_pos += x_mini_offset * 2
+
+                elif idx == 6: #southwest (FIX)
+                    print(f"idx: {idx}")
+                    y_pos += y_mini_offset * 1.5
+
+                elif idx == 7: #northwest
+                    print(f"idx: {idx}") 
+                    x_pos -= x_mini_offset * 2
+                
+
+
+            x_pos = well_x
+            y_pos = well_y
+
+            # Move to next well
+            x_pos -= x_offset
+
+        # finished row, move to next row of wells
+        y_pos -= y_offset
         x_pos = starting_x
 
     #once everything is done, home the xy stage
@@ -507,6 +592,12 @@ def add_amscope(server):
     id = server.register_namespace("Amscope") #creates the Amscope object node name
     root = server.get_objects_node()
     amscope = root.add_object(id, "Amscope") #create new object node called Amscope in root directory
+
+    def move_to_KX2_node(parent, *args):
+        result = move_to_KX2()   
+        print(result)
+        return [ua.Variant(result, ua.VariantType.String)]  
+
 
     def capture_brightfield_node(parent, input_args): 
         #load json file
@@ -524,6 +615,10 @@ def add_amscope(server):
         elif key == "12": 
             print("Selected 12 well plate...")
             data = positions["12"]
+        
+        elif key == "24": 
+            print("Selected 24 well plate")
+            data = positions["24"]
 
         else:
                 print(f"Unknown plate key: {key}")
@@ -552,6 +647,10 @@ def add_amscope(server):
             print("Selected 12 well plate...")
             data = positions["12"]
 
+        elif key == "24": 
+            print("selected 24 well plate...")
+            data = positions["24"]
+
         else:
                 print(f"Unknown plate key: {key}")
                 data = None
@@ -563,6 +662,7 @@ def add_amscope(server):
 
     amscope.add_method(id, "capture_amorphous_crystalline", capture_amorphous_and_crystalline, [ua.VariantType.String], [ua.VariantType.String]) #This method takes in a string, and outputs a string
     amscope.add_method(id, "capture_brightfield", capture_brightfield_node, [ua.VariantType.String], [ua.VariantType.String])
+    amscope.add_method(id, "move_to_kx2", move_to_KX2_node, [], [ua.VariantType.String])
 
 
 def main(): 
