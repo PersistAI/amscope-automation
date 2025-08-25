@@ -1,4 +1,12 @@
 flask
+werkzeug
 numpy
 scikit-image
 matplotlib
+pyautogui
+opcua
+pywinauto
+psutil
+torch
+Pillow
+opencv-python
