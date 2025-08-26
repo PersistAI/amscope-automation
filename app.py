@@ -307,6 +307,19 @@ def capture_brightfield(data):
             well_x, well_y = x_pos, y_pos
 
             for idx in range(9): 
+                with open("config.json", "r") as f: 
+                    config = json.load(f)
+
+                home = os.path.expanduser("~")
+                dirty_image_path = os.path.join(home, config["image_path"])
+
+                image_path = os.path.normpath(dirty_image_path)
+                print(image_path)
+
+                if not os.path.exists(image_path):
+                    print("Creating image folder...")
+                    os.makedirs(image_path, exist_ok=True)
+
                 print(f"Well {x_count},{y_count} – image {idx+1}/9 at ({x_pos}, {y_pos})")
 
                 amscope = Tucam()
@@ -324,15 +337,12 @@ def capture_brightfield(data):
                     amscope.CloseCamera()
                 amscope.UnInitApi()
 
-                image_path = r"C:\Users\ruyek\OneDrive\Desktop\Image"
-                if not os.path.exists(image_path):
-                    return {"error": "Image folder not found"}
-
                 files = [
                     os.path.join(image_path, f)
                     for f in os.listdir(image_path)
                     if os.path.isfile(os.path.join(image_path, f))
                 ]
+                
                 if not files:
                     return {"error": "No images found"}
 
@@ -473,6 +483,18 @@ def capture_amorphous_crystalline(data):
             well_y = y_pos
 
             for idx in range(9): 
+                with open("config.json", "r") as f: 
+                    config = json.load(f)
+
+                home = os.path.expanduser("~")
+                dirty_image_path = os.path.join(home, config["image_path"])
+
+                image_path = os.path.normpath(dirty_image_path)
+                print(image_path)
+
+                if not os.path.exists(image_path):
+                    print("Creating image folder...")
+                    os.makedirs(image_path, exist_ok=True)
 
                 print(f"Processing {well_name} sample #{x_count} at ({x_pos}, {y_pos})")
 
@@ -496,14 +518,6 @@ def capture_amorphous_crystalline(data):
                     amscope.CloseCamera()
                     
                 amscope.UnInitApi()
-
-                # This needs to change based on what device is being used to run the script
-                #This is where the captured images get stored
-                image_path = r"C:\Users\ruyek\OneDrive\Desktop\Image"
-
-
-                if not os.path.exists(image_path):
-                    return {"error": "Image folder not found"}
 
                 files = [
                     os.path.join(image_path, f)

@@ -12,13 +12,22 @@ from enum import Enum
 import time
 import os
 from datetime import datetime
+import json
 
 RESULTS_FOLDER = 'results'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'tif', 'tiff'}
 
 
 #THIS NEEDS TO BE CHANGED BASED ON THE DEVICE BEING USED
-save_dir = r'C:\Users\ruyek\OneDrive\Desktop\Image' #save this to image folder so it can be analyzed
+with open("config.json", "r") as f: 
+    config = json.load(f)
+
+    home = os.path.expanduser("~")
+    dirty_image_path = os.path.join(home, config["image_path"])
+
+    image_path = os.path.normpath(dirty_image_path)
+
+save_dir = image_path #save this to image folder so it can be analyzed
 
 class Tucam():
     def __init__(self):
