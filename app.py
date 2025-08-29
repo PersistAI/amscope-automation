@@ -30,6 +30,17 @@ app = Flask(__name__)
 app.config['RESULTS_FOLDER'] = RESULTS_FOLDER
 os.makedirs(RESULTS_FOLDER, exist_ok=True)
 
+stage = None
+
+
+def init_hardware():
+    global stage
+    if stage is None:
+        try:
+            stage = MisumiXYWrapper(port='COM3')
+        except:
+            stage = MisumiXYWrapper(port='COM4')
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -237,50 +248,30 @@ def zip_and_delete_image(root, zip_filename):  #root is the path to the results 
             print("Failed to remove file: ", e)
 
 def move_to_KX2(): 
-     
     try:
-        stage = MisumiXYWrapper(port='COM3')
-
+        stage.move_to_position({AxisName.X: 100000, AxisName.Y: 0})
+        result = ["Successfully moved to KX2 position."]
+        logging.info("Returning from move_to_KX2_node: %s", result)
+        return result
     except Exception as e:
-        print(f"COM4 failed: {e}")
-
-        try: 
-            stage = MisumiXYWrapper(port='COM4')
-            
-        except Exception as e:
-            print(f"COM3 also failed: {e}")
-
-        
-    print("Moving to KX2 Position...")
-    stage.move_to_position({AxisName.X: 100000, AxisName.Y: 0})
-    time.sleep(5)
-
-    return {"Successfully moved to KX2 position."}
+        logging.exception("Move to KX2 failed")
+        return [f"Error: {e}"]
 
 def capture_brightfield(data): 
     results = []
 
-    stage = None
+    plate_letters = ['A', 'B', 'C', 'D']
 
     x_offset = 10320   # well-to-well spacing X
     y_offset = 10250   # well-to-well spacing Y
     x_mini_offset = 1500   # how much camera moves within a well
     y_mini_offset = 1500
 
-    # Try to connect to stage
-    try:
-        stage = MisumiXYWrapper(port='COM3')
-    except Exception as e:
-        print(f"COM3 failed: {e}")
-        try: 
-            stage = MisumiXYWrapper(port='COM4')
-        except Exception as e:
-            print(f"COM4 also failed: {e}")
 
     starting_well = data[0]
     well_name = starting_well.get("starting-well")
     positions = starting_well.get("starting-position", [])
-    total_wells = starting_well.get("total-wells")
+    total_wells = int(starting_well.get("total-wells"))
     print("Currently on position: ", positions)
 
     starting_x = positions[0]["x"]
@@ -289,17 +280,15 @@ def capture_brightfield(data):
     print(f"starting x: {starting_x}")
     print(f"starting y: {starting_y}")
 
-    if total_wells == 12:
-        x_limit, y_limit = 4, 3
-    elif total_wells == 24:
-        x_limit, y_limit = 6, 4
-    elif total_wells == 96:
-        x_limit, y_limit = 12, 8
-    else:
-        raise ValueError("Unsupported plate format")
+    if total_wells: 
+        x_limit = 6
+        y_limit = 4
+        print(f"the x_limit is {x_limit}, y_limit is {y_limit}")
 
     # Initial stage position
     x_pos, y_pos = starting_x, starting_y
+
+    well_count = 0
 
     for y_count in range(y_limit):
         for x_count in range(x_limit): 
@@ -320,21 +309,23 @@ def capture_brightfield(data):
                     print("Creating image folder...")
                     os.makedirs(image_path, exist_ok=True)
 
-                print(f"Well {x_count},{y_count} – image {idx+1}/9 at ({x_pos}, {y_pos})")
+                well_number = f"{plate_letters[y_count]}{x_count+1}"
+                print(f"Well {well_number}, Sample {idx+1} – image {idx+1}/9 at ({x_pos}, {y_pos})")
 
-                amscope = Tucam()
                 try:
                     stage.move_to_position({AxisName.X: x_pos, AxisName.Y: y_pos})
                 except Exception as e: 
                     print("Failed to move ", e)
 
+                amscope = Tucam()
                 amscope.OpenCamera(0)
-                time.sleep(2)  # small delay
+
 
                 if amscope.TUCAMOPEN.hIdxTUCam != 0:
                     amscope.SaveImageData()
                     print("Image captured!")
                     amscope.CloseCamera()
+                    
                 amscope.UnInitApi()
 
                 files = [
@@ -349,7 +340,7 @@ def capture_brightfield(data):
                 latest_image = max(files, key=os.path.getctime)
                 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 ext = latest_image.rsplit('.', 1)[1].lower()
-                original_filename = f"{timestamp}_brightfield.{ext}"
+                original_filename = f"{timestamp}_brightfield_{well_number}_S{idx+1}.{ext}"
                 original_path = os.path.join(app.config['RESULTS_FOLDER'], original_filename)
 
                 with open(latest_image, 'rb') as file: 
@@ -359,6 +350,7 @@ def capture_brightfield(data):
 
                 brightfield_analysis()
 
+                
                 if idx == 0: #north
                     print(f"idx: {idx}")
                     x_pos -= x_mini_offset
@@ -398,6 +390,15 @@ def capture_brightfield(data):
             x_pos, y_pos = well_x, well_y
 
             x_pos -= x_offset
+            well_count+=1
+
+            if well_count >= total_wells: 
+                break
+        
+
+        if well_count >= total_wells: 
+            break
+
 
         y_pos -= y_offset
         x_pos = starting_x
@@ -408,12 +409,15 @@ def capture_brightfield(data):
 
     zip_filename = f"{timestamp}_brightfield_original.zip"
     zip_and_delete_image(parent_path, zip_filename)
-    return {"Finished brightfield analysis on all wells."}
+
+    stage.disconnect()
+    amscope.CloseCamera()
+    amscope.UnInitApi()
+    return ["Finished brightfield analysis on all wells."]
 
 
 def capture_amorphous_crystalline(data):
     results = []
-    stage = None
 
     #NOTE: 500steps = 1mm
     
@@ -427,7 +431,7 @@ def capture_amorphous_crystalline(data):
     starting_well = data[0]
     well_name = starting_well.get("starting-well")
     positions = starting_well.get("starting-position", [])
-    total_wells = starting_well.get("total-wells")
+    total_wells = int(starting_well.get("total-wells"))
     print("Currently on position: ", positions)
 
     starting_x = positions[0]["x"]
@@ -436,45 +440,24 @@ def capture_amorphous_crystalline(data):
     print(f"starting x: {starting_x}")
     print(f"starting y: {starting_y}")
 
-    if total_wells == 12: #if it's a 12 well plate
-
-            x_limit = 4
-            y_limit = 3
-
-            print(f"x_limit is {x_limit}, y_limit is {y_limit}")
-
-    elif total_wells == 96:
-
-            x_limit = 12
-            y_limit = 8
-            print(f"x_limit is {x_limit}, y_limit is {y_limit}")
-
-    elif total_wells == 24: 
+    if total_wells:  #Assuming we use 24 wells for everything
 
             x_limit = 6
             y_limit = 4
             print(f"the x_limit is {x_limit}, y_limit is {y_limit}")
 
 
+
+    plate_letters = ['A', 'B', 'C', 'D']
     x_count = 0 #use these to determine if we hit the limit of the well
     y_count = 0
 
     x_pos = starting_x
     y_pos = starting_y
 
+    well_count = 0
+
     #INITIALIZE THE XY STAGE, TRY cONNECTING TO COM3 AND COM4
-    try:
-        stage = MisumiXYWrapper(port='COM3')
-
-    except Exception as e:
-        print(f"COM4 failed: {e}")
-
-        try: 
-            stage = MisumiXYWrapper(port='COM4')
-            
-        except Exception as e:
-            print(f"COM3 also failed: {e}")
-
 
     for y_count in range(y_limit):
         for x_count in range(x_limit):
@@ -496,21 +479,18 @@ def capture_amorphous_crystalline(data):
                     print("Creating image folder...")
                     os.makedirs(image_path, exist_ok=True)
 
-                print(f"Processing {well_name} sample #{x_count} at ({x_pos}, {y_pos})")
-
-                amscope = Tucam()
+                well_number = f"{plate_letters[y_count]}{x_count+1}"
+                print(f"Processing {well_number} sample #{idx} at ({x_pos}, {y_pos})")
                 
-            
+                
                 try:
                     stage.move_to_position({AxisName.X: x_pos, AxisName.Y: y_pos})
+                    time.sleep(0.5)
                 except Exception as e: 
                     print("Failed to move ", e)
-                
-
+            
+                amscope = Tucam()
                 amscope.OpenCamera(0)
-
-                #try to give camera a delay between opening the camera and taking the picture
-                time.sleep(10)
 
                 if amscope.TUCAMOPEN.hIdxTUCam != 0:
                     amscope.SaveImageData() #this takes the picture
@@ -540,11 +520,13 @@ def capture_amorphous_crystalline(data):
                         filename=latest_image,
                         timestamp=timestamp,
                         file=file,
-                        well_name = well_name,
-                        sample_num = x_count
+                        well_name = well_number,
+                        sample_num = idx+1
                     )
                     results.append((label, plot_filename))
 
+
+                
                 if idx == 0: #north
                     print(f"idx: {idx}")
                     x_pos -= x_mini_offset
@@ -580,7 +562,7 @@ def capture_amorphous_crystalline(data):
                 elif idx == 7: #northwest
                     print(f"idx: {idx}") 
                     x_pos -= x_mini_offset * 2
-                
+
 
 
             x_pos = well_x
@@ -588,6 +570,14 @@ def capture_amorphous_crystalline(data):
 
             # Move to next well
             x_pos -= x_offset
+            well_count+=1
+
+            if well_count >= total_wells: 
+                break
+        
+
+        if well_count >= total_wells: 
+            break
 
         # finished row, move to next row of wells
         y_pos -= y_offset
@@ -598,7 +588,9 @@ def capture_amorphous_crystalline(data):
     stage.home_all_axes(timeout=5)
     zip_filename = f"{timestamp}_amorphous_crystalline_original.zip"
     zip_and_delete_image(parent_path, zip_filename)
-    return results if results else {"error": "No samples processed"}
+
+    stage.disconnect()
+    return ["success!"] if results else ["No samples processed"]
 
 #UASERVER LOGIC
 #create method node
@@ -621,23 +613,20 @@ def add_amscope(server):
         key = str(input_args.Value)
         print("Key is: ", key)
 
-        if key == "96":  
-            print("Selected 96 well plate...")
-            data = positions["96"]
-
-
-        elif key == "12": 
-            print("Selected 12 well plate...")
-            data = positions["12"]
-        
-        elif key == "24": 
+        if key == "24": 
             print("Selected 24 well plate")
             data = positions["24"]
 
         else:
                 print(f"Unknown plate key: {key}")
-                data = None
-        
+                data = [
+                    {
+                        "starting-well": "A1",
+                        "starting-position": [{"x": 60440, "y": 32500}],
+                        "total-wells": key
+                    }
+                ]
+                        
         result = capture_brightfield(data) #call the capture method with test data
 
         print("Capture result:", result)
@@ -652,22 +641,19 @@ def add_amscope(server):
         key = str(input_args.Value)
         print("Key is: ", key)
 
-        if key == "96":  
-            print("Selected 96 well plate...")
-            data = positions["96"]
-
-
-        elif key == "12": 
-            print("Selected 12 well plate...")
-            data = positions["12"]
-
-        elif key == "24": 
-            print("selected 24 well plate...")
+        if key == "24": 
+            print("Selected 24 well plate")
             data = positions["24"]
 
         else:
                 print(f"Unknown plate key: {key}")
-                data = None
+                data = [
+                    {
+                        "starting-well": "A1",
+                        "starting-position": [{"x": 60440, "y": 32500}],
+                        "total-wells": key
+                    }
+                ]
         
         result = capture_amorphous_crystalline(data) #call the capture method with test data
 
@@ -680,6 +666,8 @@ def add_amscope(server):
 
 
 def main(): 
+    
+    init_hardware()  
     #create the server object and set the endpoint where clients will connect
     server = Server()
     server.set_endpoint("opc.tcp://0.0.0.0:4840/")
@@ -688,7 +676,7 @@ def main():
 
     try: 
         while True:  #keep the server running until it is manually stopped
-            time.sleep(1) #this is needed bc it prevents loop from hogging CPU
+            time.sleep(1) 
     finally: 
         server.stop() #guarantees server stops when you interrupt it
 

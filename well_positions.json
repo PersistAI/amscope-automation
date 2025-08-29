@@ -1,28 +1,4 @@
 {
-  "96": [ 
-    {
-    "starting-well": "A1",
-    "starting-position": [
-                    {"x": 14000, "y": 12000}
-                ],
-                
-      "total-wells": 96
-    }
-  ],
-
-  "12": [
-
-    {
-    "starting-well": "A1",
-    "starting-position": [
-                    {"x": 14000, "y": 12000}
-
-    ],
-    "total-wells": 12
-}
-  ],
-
-
   "24": [
 
     {
@@ -33,6 +9,15 @@
     ],
     "total-wells": 24
 }
+  ],
+
+  "other": [
+    {
+      "starting-well": "A1",
+      "starting-position": [
+        {"x": 60440, "y": 32500}
+      ]
+    }
   ]
 
 
